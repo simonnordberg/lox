@@ -3,10 +3,13 @@ package com.simonnordberg.lox;
 import static com.simonnordberg.lox.TokenType.BANG;
 import static com.simonnordberg.lox.TokenType.BANG_EQUAL;
 import static com.simonnordberg.lox.TokenType.EOF;
+import static com.simonnordberg.lox.TokenType.EQUAL;
 import static com.simonnordberg.lox.TokenType.EQUAL_EQUAL;
 import static com.simonnordberg.lox.TokenType.FALSE;
 import static com.simonnordberg.lox.TokenType.GREATER;
 import static com.simonnordberg.lox.TokenType.GREATER_EQUAL;
+import static com.simonnordberg.lox.TokenType.IDENTIFIER;
+import static com.simonnordberg.lox.TokenType.LEFT_BRACE;
 import static com.simonnordberg.lox.TokenType.LEFT_PAREN;
 import static com.simonnordberg.lox.TokenType.LESS;
 import static com.simonnordberg.lox.TokenType.LESS_EQUAL;
@@ -14,22 +17,41 @@ import static com.simonnordberg.lox.TokenType.MINUS;
 import static com.simonnordberg.lox.TokenType.NIL;
 import static com.simonnordberg.lox.TokenType.NUMBER;
 import static com.simonnordberg.lox.TokenType.PLUS;
+import static com.simonnordberg.lox.TokenType.PRINT;
+import static com.simonnordberg.lox.TokenType.RIGHT_BRACE;
 import static com.simonnordberg.lox.TokenType.RIGHT_PAREN;
 import static com.simonnordberg.lox.TokenType.SEMICOLON;
 import static com.simonnordberg.lox.TokenType.SLASH;
 import static com.simonnordberg.lox.TokenType.STAR;
 import static com.simonnordberg.lox.TokenType.STRING;
 import static com.simonnordberg.lox.TokenType.TRUE;
+import static com.simonnordberg.lox.TokenType.VAR;
 
 import com.simonnordberg.lox.Expr.Binary;
 import com.simonnordberg.lox.Expr.Grouping;
 import com.simonnordberg.lox.Expr.Literal;
 import com.simonnordberg.lox.Expr.Unary;
+import com.simonnordberg.lox.Expr.Variable;
+import com.simonnordberg.lox.Stmt.Block;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
  *
  * Expression Grammar:
+ * program        → declaration* EOF ;
+ * declaration    → varDecl
+ *                | statement ;
+ * varDecl        → "var" IDENTIFIER ( "=" expression )? ";" ;
+ * statement      → exprStmt
+ *                | printStmt
+ *                | block ;
+ * exprStmt       → expression ";" ;
+ * printStmt      → "print" expression ";" ;
+ * block          → "{" declaration* "}" ;
+ * expression     → assignment ;
+ * assignment     → IDENTIFIER "=" assignment
+ *                | equality ;
  * expression     → equality ;
  * equality       → comparison ( ( "!=" | "==" ) comparison )* ;
  * comparison     → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
@@ -37,8 +59,10 @@ import java.util.List;
  * factor         → unary ( ( "/" | "*" ) unary )* ;
  * unary          → ( "!" | "-" ) unary
  *                | primary ;
- * primary        → NUMBER | STRING | "true" | "false" | "nil"
- *                | "(" expression ")" ;
+ * primary        → "true" | "false" | "nil"
+ *                | NUMBER | STRING
+ *                | "(" expression ")"
+ *                | IDENTIFIER ;
  */
 
 public class Parser {
@@ -50,16 +74,86 @@ public class Parser {
     this.tokens = tokens;
   }
 
-  Expr parse() {
+  List<Stmt> parse() {
+    List<Stmt> statements = new ArrayList<>();
+    while (!isAtEnd()) {
+      statements.add(declaration());
+    }
+    return statements;
+  }
+
+  private Expr expression() {
+    return assignment();
+  }
+
+  private Expr assignment() {
+    Expr expr = equality();
+
+    if (match(EQUAL)) {
+      // Trick to move beyond a single token lookahead
+      Token equals = previous();
+      Expr value = assignment();
+
+      // Support
+      if (expr instanceof Expr.Variable) {
+        Token name = ((Variable) expr).name;
+        return new Expr.Assign(name, value);
+      }
+
+      error(equals, "Invalid assignment target");
+    }
+    return expr;
+  }
+
+  private Stmt declaration() {
     try {
-      return expression();
+      if (match(VAR)) {
+        return varDeclaration();
+      }
+
+      return statement();
     } catch (ParseError error) {
+      synchronize();
       return null;
     }
   }
 
-  private Expr expression() {
-    return equality();
+  private Stmt varDeclaration() {
+    Token name = consume(IDENTIFIER, "Expect variable name");
+    Expr initializer = match(EQUAL) ? expression() : null;
+    consume(SEMICOLON, "Expect ';' after variable declaration");
+    return new Stmt.Var(name, initializer);
+  }
+
+  private Stmt statement() {
+    if (match(PRINT)) {
+      return printStatement();
+    }
+    if (match(LEFT_BRACE)) {
+      return new Block(block());
+    }
+    return expressionStatement();
+  }
+
+  private List<Stmt> block() {
+    List<Stmt> statements = new ArrayList<>();
+    while (!check(RIGHT_BRACE) && !isAtEnd()) {
+      statements.add(declaration());
+    }
+    consume(RIGHT_BRACE, "Expect '}' after block");
+    return statements;
+  }
+
+  private Stmt printStatement() {
+    Expr value = expression();
+    consume(SEMICOLON, "Expect ';' after value");
+    return new Stmt.Print(value);
+  }
+
+  private Stmt expressionStatement() {
+    Expr expr = expression();
+    consume(SEMICOLON, "Expect ';' after value");
+    return new Stmt.Expression(expr);
   }
 
   private Expr equality() {
@@ -127,6 +221,9 @@ public class Parser {
     }
     if (match(NUMBER, STRING)) {
       return new Literal(previous().literal);
+    }
+    if (match(IDENTIFIER)) {
+      return new Expr.Variable(previous());
     }
     if (match(LEFT_PAREN)) {
       Expr expr = expression();
