@@ -2,6 +2,7 @@ package com.simonnordberg.lox;
 
 import com.simonnordberg.lox.Expr.Assign;
 import com.simonnordberg.lox.Expr.Binary;
+import com.simonnordberg.lox.Expr.Call;
 import com.simonnordberg.lox.Expr.Grouping;
 import com.simonnordberg.lox.Expr.Literal;
 import com.simonnordberg.lox.Expr.Logical;
@@ -32,6 +33,11 @@ public class AstPrinter implements Expr.Visitor<String> {
   @Override
   public String visitBinaryExpr(Binary expr) {
     return parenthesize(expr.operator.lexeme, expr.left, expr.right);
+  }
+
+  @Override
+  public String visitCallExpr(Call expr) {
+    return null;
   }
 
   @Override
