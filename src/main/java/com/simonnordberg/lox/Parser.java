@@ -1,7 +1,9 @@
 package com.simonnordberg.lox;
 
+import static com.simonnordberg.lox.TokenType.AND;
 import static com.simonnordberg.lox.TokenType.BANG;
 import static com.simonnordberg.lox.TokenType.BANG_EQUAL;
+import static com.simonnordberg.lox.TokenType.ELSE;
 import static com.simonnordberg.lox.TokenType.EOF;
 import static com.simonnordberg.lox.TokenType.EQUAL;
 import static com.simonnordberg.lox.TokenType.EQUAL_EQUAL;
@@ -9,6 +11,7 @@ import static com.simonnordberg.lox.TokenType.FALSE;
 import static com.simonnordberg.lox.TokenType.GREATER;
 import static com.simonnordberg.lox.TokenType.GREATER_EQUAL;
 import static com.simonnordberg.lox.TokenType.IDENTIFIER;
+import static com.simonnordberg.lox.TokenType.IF;
 import static com.simonnordberg.lox.TokenType.LEFT_BRACE;
 import static com.simonnordberg.lox.TokenType.LEFT_PAREN;
 import static com.simonnordberg.lox.TokenType.LESS;
@@ -16,6 +19,7 @@ import static com.simonnordberg.lox.TokenType.LESS_EQUAL;
 import static com.simonnordberg.lox.TokenType.MINUS;
 import static com.simonnordberg.lox.TokenType.NIL;
 import static com.simonnordberg.lox.TokenType.NUMBER;
+import static com.simonnordberg.lox.TokenType.OR;
 import static com.simonnordberg.lox.TokenType.PLUS;
 import static com.simonnordberg.lox.TokenType.PRINT;
 import static com.simonnordberg.lox.TokenType.RIGHT_BRACE;
@@ -33,6 +37,7 @@ import com.simonnordberg.lox.Expr.Literal;
 import com.simonnordberg.lox.Expr.Unary;
 import com.simonnordberg.lox.Expr.Variable;
 import com.simonnordberg.lox.Stmt.Block;
+import com.simonnordberg.lox.Stmt.If;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -44,14 +49,19 @@ import java.util.List;
  *                | statement ;
  * varDecl        → "var" IDENTIFIER ( "=" expression )? ";" ;
  * statement      → exprStmt
+ *                | ifStmt
  *                | printStmt
  *                | block ;
  * exprStmt       → expression ";" ;
+ * ifStmt         → "if" "(" expression ")" statement
+ *                ( "else" statement )? ;
  * printStmt      → "print" expression ";" ;
  * block          → "{" declaration* "}" ;
  * expression     → assignment ;
  * assignment     → IDENTIFIER "=" assignment
- *                | equality ;
+ *                | logic_or ;
+ * logic_or       → logic_and ( "or" logic_and )* ;
+ * logic_and      → equality ( "and" equality )* ;
  * expression     → equality ;
  * equality       → comparison ( ( "!=" | "==" ) comparison )* ;
  * comparison     → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
@@ -87,7 +97,7 @@ public class Parser {
   }
 
   private Expr assignment() {
-    Expr expr = equality();
+    Expr expr = or();
 
     if (match(EQUAL)) {
       // Trick to move beyond a single token lookahead
@@ -101,6 +111,26 @@ public class Parser {
       }
 
       error(equals, "Invalid assignment target");
+    }
+    return expr;
+  }
+
+  private Expr or() {
+    Expr expr = and();
+    while (match(OR)) {
+      Token operator = previous();
+      Expr right = and();
+      expr = new Expr.Logical(expr, operator, right);
+    }
+    return expr;
+  }
+
+  private Expr and() {
+    Expr expr = equality();
+    while (match(AND)) {
+      Token operator = previous();
+      Expr right = equality();
+      expr = new Expr.Logical(expr, operator, right);
     }
     return expr;
   }
@@ -126,6 +156,9 @@ public class Parser {
   }
 
   private Stmt statement() {
+    if (match(IF)) {
+      return ifStatement();
+    }
     if (match(PRINT)) {
       return printStatement();
     }
@@ -133,6 +166,16 @@ public class Parser {
       return new Block(block());
     }
     return expressionStatement();
+  }
+
+  private Stmt ifStatement() {
+    consume(LEFT_PAREN, "Expect '(' after 'if'");
+    Expr condition = expression();
+    consume(RIGHT_PAREN, "Expect ')' after if condition");
+
+    Stmt thenBranch = statement();
+    Stmt elseBranch = match(ELSE) ? statement() : null;
+    return new If(condition, thenBranch, elseBranch);
   }
 
   private List<Stmt> block() {

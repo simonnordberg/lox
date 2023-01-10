@@ -4,10 +4,12 @@ import com.simonnordberg.lox.Expr.Assign;
 import com.simonnordberg.lox.Expr.Binary;
 import com.simonnordberg.lox.Expr.Grouping;
 import com.simonnordberg.lox.Expr.Literal;
+import com.simonnordberg.lox.Expr.Logical;
 import com.simonnordberg.lox.Expr.Unary;
 import com.simonnordberg.lox.Expr.Variable;
 import com.simonnordberg.lox.Stmt.Block;
 import com.simonnordberg.lox.Stmt.Expression;
+import com.simonnordberg.lox.Stmt.If;
 import com.simonnordberg.lox.Stmt.Print;
 import com.simonnordberg.lox.Stmt.Var;
 import java.util.List;
@@ -115,6 +117,21 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
   }
 
   @Override
+  public Object visitLogicalExpr(Logical expr) {
+    Object left = evaluate(expr.left);
+    if (expr.operator.type == TokenType.OR) {
+      if (isTruthy(left)) {
+        return left;
+      }
+    } else {
+      if (!isTruthy(left)) {
+        return left;
+      }
+    }
+    return evaluate(expr.right);
+  }
+
+  @Override
   public Object visitUnaryExpr(Unary expr) {
     Object right = evaluate(expr.right);
     switch (expr.operator.type) {
@@ -155,6 +172,16 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
   @Override
   public Void visitExpressionStmt(Expression stmt) {
     evaluate(stmt.expression);
+    return null;
+  }
+
+  @Override
+  public Void visitIfStmt(If stmt) {
+    if (isTruthy(evaluate(stmt.expression))) {
+      execute(stmt.thenBranch);
+    } else if (stmt.elseBranch != null) {
+      execute(stmt.elseBranch);
+    }
     return null;
   }
 

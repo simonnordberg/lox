@@ -4,6 +4,7 @@ import com.simonnordberg.lox.Expr.Assign;
 import com.simonnordberg.lox.Expr.Binary;
 import com.simonnordberg.lox.Expr.Grouping;
 import com.simonnordberg.lox.Expr.Literal;
+import com.simonnordberg.lox.Expr.Logical;
 import com.simonnordberg.lox.Expr.Unary;
 import com.simonnordberg.lox.Expr.Variable;
 
@@ -41,6 +42,11 @@ public class AstPrinter implements Expr.Visitor<String> {
   @Override
   public String visitLiteralExpr(Literal expr) {
     return expr.value != null ? expr.value.toString() : "nil";
+  }
+
+  @Override
+  public String visitLogicalExpr(Logical expr) {
+    return null;
   }
 
   @Override
