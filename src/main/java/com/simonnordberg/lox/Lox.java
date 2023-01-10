@@ -9,6 +9,7 @@ import java.nio.file.Paths;
 import java.util.List;
 
 public class Lox {
+
   private static final Interpreter interpreter = new Interpreter();
   private static boolean hadError = false;
   private static boolean hadRuntimeError = false;
@@ -45,6 +46,14 @@ public class Lox {
     List<Stmt> statements = parser.parse();
 
     // Stop if there was a syntax error
+    if (hadError) {
+      return;
+    }
+
+    Resolver resolver = new Resolver(interpreter);
+    resolver.resolve(statements);
+
+    // Stop if there was a resolution error
     if (hadError) {
       return;
     }
