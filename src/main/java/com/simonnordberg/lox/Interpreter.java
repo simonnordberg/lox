@@ -12,6 +12,7 @@ import com.simonnordberg.lox.Stmt.Expression;
 import com.simonnordberg.lox.Stmt.If;
 import com.simonnordberg.lox.Stmt.Print;
 import com.simonnordberg.lox.Stmt.Var;
+import com.simonnordberg.lox.Stmt.While;
 import java.util.List;
 
 public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
@@ -196,6 +197,14 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
   public Void visitVarStmt(Var stmt) {
     Object value = stmt.initializer != null ? evaluate(stmt.initializer) : null;
     environment.define(stmt.name.lexeme, value);
+    return null;
+  }
+
+  @Override
+  public Void visitWhileStmt(While stmt) {
+    while (isTruthy(evaluate(stmt.condition))) {
+      execute(stmt.body);
+    }
     return null;
   }
 

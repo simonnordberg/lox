@@ -30,6 +30,7 @@ import static com.simonnordberg.lox.TokenType.STAR;
 import static com.simonnordberg.lox.TokenType.STRING;
 import static com.simonnordberg.lox.TokenType.TRUE;
 import static com.simonnordberg.lox.TokenType.VAR;
+import static com.simonnordberg.lox.TokenType.WHILE;
 
 import com.simonnordberg.lox.Expr.Binary;
 import com.simonnordberg.lox.Expr.Grouping;
@@ -51,11 +52,13 @@ import java.util.List;
  * statement      → exprStmt
  *                | ifStmt
  *                | printStmt
+ *                | whileStmt
  *                | block ;
  * exprStmt       → expression ";" ;
  * ifStmt         → "if" "(" expression ")" statement
  *                ( "else" statement )? ;
  * printStmt      → "print" expression ";" ;
+ * whileStmt      → "while" "(" expression ")" statement ;
  * block          → "{" declaration* "}" ;
  * expression     → assignment ;
  * assignment     → IDENTIFIER "=" assignment
@@ -162,10 +165,21 @@ public class Parser {
     if (match(PRINT)) {
       return printStatement();
     }
+    if (match(WHILE)) {
+      return whileStatement();
+    }
     if (match(LEFT_BRACE)) {
       return new Block(block());
     }
     return expressionStatement();
+  }
+
+  private Stmt whileStatement() {
+    consume(LEFT_PAREN, "Expect '(' after 'while'");
+    Expr condition = expression();
+    consume(RIGHT_PAREN, "Expect ')' after while condition");
+    Stmt body = statement();
+    return new Stmt.While(condition, body);
   }
 
   private Stmt ifStatement() {
