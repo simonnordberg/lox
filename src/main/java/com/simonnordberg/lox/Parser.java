@@ -8,6 +8,7 @@ import static com.simonnordberg.lox.TokenType.EOF;
 import static com.simonnordberg.lox.TokenType.EQUAL;
 import static com.simonnordberg.lox.TokenType.EQUAL_EQUAL;
 import static com.simonnordberg.lox.TokenType.FALSE;
+import static com.simonnordberg.lox.TokenType.FOR;
 import static com.simonnordberg.lox.TokenType.GREATER;
 import static com.simonnordberg.lox.TokenType.GREATER_EQUAL;
 import static com.simonnordberg.lox.TokenType.IDENTIFIER;
@@ -40,6 +41,7 @@ import com.simonnordberg.lox.Expr.Variable;
 import com.simonnordberg.lox.Stmt.Block;
 import com.simonnordberg.lox.Stmt.If;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -50,11 +52,15 @@ import java.util.List;
  *                | statement ;
  * varDecl        → "var" IDENTIFIER ( "=" expression )? ";" ;
  * statement      → exprStmt
+ *                | forStmt
  *                | ifStmt
  *                | printStmt
  *                | whileStmt
  *                | block ;
  * exprStmt       → expression ";" ;
+ * forStmt        → "for" "(" ( varDecl | exprStmt | ";" )
+ *                  expression? ";"
+ *                  expression? ")" statement ;
  * ifStmt         → "if" "(" expression ")" statement
  *                ( "else" statement )? ;
  * printStmt      → "print" expression ";" ;
@@ -159,6 +165,9 @@ public class Parser {
   }
 
   private Stmt statement() {
+    if (match(FOR)) {
+      return forStatement();
+    }
     if (match(IF)) {
       return ifStatement();
     }
@@ -172,6 +181,43 @@ public class Parser {
       return new Block(block());
     }
     return expressionStatement();
+  }
+
+  private Stmt forStatement() {
+    consume(LEFT_PAREN, "Expect '(' after 'for'");
+    Stmt initializer;
+    if (match(SEMICOLON)) {
+      initializer = null;
+    } else if (match(VAR)) {
+      initializer = varDeclaration();
+    } else {
+      initializer = expressionStatement();
+    }
+
+    Expr condition = !check(SEMICOLON) ? expression() : null;
+    consume(SEMICOLON, "Expect ';' after loop condition");
+
+    Expr increment = !check(RIGHT_PAREN) ? expression() : null;
+    consume(RIGHT_PAREN, "Expect ')' after for clauses");
+
+    Stmt body = statement();
+
+    // Use existing primitives to create the forLoop
+    if (increment != null) {
+      body = new Stmt.Block(Arrays.asList(body, new Stmt.Expression(increment)));
+    }
+
+    if (condition == null) {
+      condition = new Expr.Literal(true);
+    }
+
+    body = new Stmt.While(condition, body);
+
+    if (initializer != null) {
+      body = new Stmt.Block(Arrays.asList(initializer, body));
+    }
+
+    return body;
   }
 
   private Stmt whileStatement() {
