@@ -3,12 +3,15 @@ package com.simonnordberg.lox;
 import com.simonnordberg.lox.Expr.Assign;
 import com.simonnordberg.lox.Expr.Binary;
 import com.simonnordberg.lox.Expr.Call;
+import com.simonnordberg.lox.Expr.Get;
 import com.simonnordberg.lox.Expr.Grouping;
 import com.simonnordberg.lox.Expr.Literal;
 import com.simonnordberg.lox.Expr.Logical;
+import com.simonnordberg.lox.Expr.Set;
 import com.simonnordberg.lox.Expr.Unary;
 import com.simonnordberg.lox.Expr.Variable;
 import com.simonnordberg.lox.Stmt.Block;
+import com.simonnordberg.lox.Stmt.Class;
 import com.simonnordberg.lox.Stmt.Expression;
 import com.simonnordberg.lox.Stmt.Function;
 import com.simonnordberg.lox.Stmt.If;
@@ -164,6 +167,16 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
   }
 
   @Override
+  public Object visitGetExpr(Get expr) {
+    Object object = evaluate(expr.object);
+    if (object instanceof LoxInstance) {
+      return ((LoxInstance) object).get(expr.name);
+    }
+
+    throw new RuntimeError(expr.name, "Only instances have properties");
+  }
+
+  @Override
   public Object visitGroupingExpr(Grouping expr) {
     return evaluate(expr.expression);
   }
@@ -189,6 +202,25 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
   }
 
   @Override
+  public Object visitSetExpr(Set expr) {
+    Object object = evaluate(expr.object);
+
+    if (!(object instanceof LoxInstance)) {
+      throw new RuntimeError(expr.name, "Only instances have fields");
+    }
+
+    LoxInstance instance = (LoxInstance) object;
+    Object value = evaluate(expr.value);
+    instance.set(expr.name, value);
+    return value;
+  }
+
+  @Override
+  public Object visitThisExpr(Expr.This expr) {
+    return lookupVariable(expr.keyword, expr);
+  }
+
+  @Override
   public Object visitUnaryExpr(Unary expr) {
     Object right = evaluate(expr.right);
     switch (expr.operator.type) {
@@ -206,7 +238,7 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
     return lookupVariable(expr.name, expr);
   }
 
-  private Object lookupVariable(Token name, Variable expr) {
+  private Object lookupVariable(Token name, Expr expr) {
     Integer distance = locals.get(expr);
     if (distance != null) {
       return environment.getAt(distance, name.lexeme);
@@ -220,6 +252,22 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
   @Override
   public Void visitBlockStmt(Block stmt) {
     executeBlock(stmt.statements, new Environment(environment));
+    return null;
+  }
+
+  @Override
+  public Void visitClassStmt(Class stmt) {
+    environment.define(stmt.name.lexeme, null);
+
+    Map<String, LoxFunction> methods = new HashMap<>();
+    for (Function method : stmt.methods) {
+      LoxFunction function = new LoxFunction(method, environment,
+          method.name.lexeme.equals("init"));
+      methods.put(method.name.lexeme, function);
+    }
+
+    LoxClass klass = new LoxClass(stmt.name.lexeme, methods);
+    environment.assign(stmt.name, klass);
     return null;
   }
 
@@ -243,7 +291,7 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
 
   @Override
   public Void visitFunctionStmt(Function stmt) {
-    LoxFunction function = new LoxFunction(stmt, environment);
+    LoxFunction function = new LoxFunction(stmt, environment, false);
     environment.define(stmt.name.lexeme, function);
     return null;
   }

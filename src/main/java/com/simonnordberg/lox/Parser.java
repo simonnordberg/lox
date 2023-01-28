@@ -3,7 +3,9 @@ package com.simonnordberg.lox;
 import static com.simonnordberg.lox.TokenType.AND;
 import static com.simonnordberg.lox.TokenType.BANG;
 import static com.simonnordberg.lox.TokenType.BANG_EQUAL;
+import static com.simonnordberg.lox.TokenType.CLASS;
 import static com.simonnordberg.lox.TokenType.COMMA;
+import static com.simonnordberg.lox.TokenType.DOT;
 import static com.simonnordberg.lox.TokenType.ELSE;
 import static com.simonnordberg.lox.TokenType.EOF;
 import static com.simonnordberg.lox.TokenType.EQUAL;
@@ -32,16 +34,20 @@ import static com.simonnordberg.lox.TokenType.SEMICOLON;
 import static com.simonnordberg.lox.TokenType.SLASH;
 import static com.simonnordberg.lox.TokenType.STAR;
 import static com.simonnordberg.lox.TokenType.STRING;
+import static com.simonnordberg.lox.TokenType.THIS;
 import static com.simonnordberg.lox.TokenType.TRUE;
 import static com.simonnordberg.lox.TokenType.VAR;
 import static com.simonnordberg.lox.TokenType.WHILE;
 
 import com.simonnordberg.lox.Expr.Binary;
+import com.simonnordberg.lox.Expr.Get;
 import com.simonnordberg.lox.Expr.Grouping;
 import com.simonnordberg.lox.Expr.Literal;
+import com.simonnordberg.lox.Expr.This;
 import com.simonnordberg.lox.Expr.Unary;
 import com.simonnordberg.lox.Expr.Variable;
 import com.simonnordberg.lox.Stmt.Block;
+import com.simonnordberg.lox.Stmt.Class;
 import com.simonnordberg.lox.Stmt.If;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -51,9 +57,11 @@ import java.util.List;
  *
  * Expression Grammar:
  * program        → declaration* EOF ;
- * declaration    → funDecl
+ * declaration    → classDecl
+ *                | funDecl
  *                | varDecl
  *                | statement ;
+ * classDecl      → "class" IDENTIFIER "{" function* "}" ;
  * funDecl        → "fun" function ;
  * function       → IDENTIFIER "(" parameters? ")" block ;
  * parameters     → IDENTIFIER ( "," IDENTIFIER )* ;
@@ -76,7 +84,7 @@ import java.util.List;
  * whileStmt      → "while" "(" expression ")" statement ;
  * block          → "{" declaration* "}" ;
  * expression     → assignment ;
- * assignment     → IDENTIFIER "=" assignment
+ * assignment     → ( call "." )? IDENTIFIER "=" assignment
  *                | logic_or ;
  * logic_or       → logic_and ( "or" logic_and )* ;
  * logic_and      → equality ( "and" equality )* ;
@@ -86,7 +94,7 @@ import java.util.List;
  * factor         → unary ( ( "/" | "*" ) unary )* ;
  * unary          → ( "!" | "-" ) unary | call ;
  * unary          → ( "!" | "-" ) unary
- * call           → primary ( "(" arguments? ")" )* ;
+ * call           → primary ( "(" arguments? ")" | "." IDENTIFIER )* ;
  * arguments      → expression ( "," expression )* ;
  * primary        → "true" | "false" | "nil"
  *                | NUMBER | STRING
@@ -127,6 +135,9 @@ public class Parser {
       if (expr instanceof Expr.Variable) {
         Token name = ((Variable) expr).name;
         return new Expr.Assign(name, value);
+      } else if(expr instanceof Get) {
+        Expr.Get get = (Get) expr;
+        return new Expr.Set(get.object, get.name, value);
       }
 
       error(equals, "Invalid assignment target");
@@ -156,6 +167,9 @@ public class Parser {
 
   private Stmt declaration() {
     try {
+      if (match(CLASS)) {
+        return classDeclaration();
+      }
       if (match(FUN)) {
         return function("function");
       }
@@ -170,7 +184,20 @@ public class Parser {
     }
   }
 
-  private Stmt function(String kind) {
+  private Stmt classDeclaration() {
+    Token name = consume(IDENTIFIER, "Expect class name");
+    consume(LEFT_BRACE, "Expect '{' before class body");
+
+    List<Stmt.Function> methods = new ArrayList<>();
+    while (!check(RIGHT_BRACE) && !isAtEnd()) {
+      methods.add(function("method"));
+    }
+
+    consume(RIGHT_BRACE, "Expect '}' after class body");
+    return new Class(name, methods);
+  }
+
+  private Stmt.Function function(String kind) {
     Token name = consume(IDENTIFIER, "Expect " + kind + " name");
     consume(LEFT_PAREN, "Expect '(' after " + kind + "name");
     List<Token> parameters = new ArrayList<>();
@@ -358,6 +385,9 @@ public class Parser {
     while (true) {
       if (match(LEFT_PAREN)) {
         expr = finishCall(expr);
+      } else if (match(DOT)) {
+        Token name = consume(IDENTIFIER, "Expect property name after '.'");
+        expr = new Get(expr, name);
       } else {
         break;
       }
@@ -391,6 +421,9 @@ public class Parser {
     }
     if (match(NUMBER, STRING)) {
       return new Literal(previous().literal);
+    }
+    if (match(THIS)) {
+      return new This(previous());
     }
     if (match(IDENTIFIER)) {
       return new Expr.Variable(previous());
