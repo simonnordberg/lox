@@ -34,6 +34,7 @@ import static com.simonnordberg.lox.TokenType.SEMICOLON;
 import static com.simonnordberg.lox.TokenType.SLASH;
 import static com.simonnordberg.lox.TokenType.STAR;
 import static com.simonnordberg.lox.TokenType.STRING;
+import static com.simonnordberg.lox.TokenType.SUPER;
 import static com.simonnordberg.lox.TokenType.THIS;
 import static com.simonnordberg.lox.TokenType.TRUE;
 import static com.simonnordberg.lox.TokenType.VAR;
@@ -43,6 +44,7 @@ import com.simonnordberg.lox.Expr.Binary;
 import com.simonnordberg.lox.Expr.Get;
 import com.simonnordberg.lox.Expr.Grouping;
 import com.simonnordberg.lox.Expr.Literal;
+import com.simonnordberg.lox.Expr.Super;
 import com.simonnordberg.lox.Expr.This;
 import com.simonnordberg.lox.Expr.Unary;
 import com.simonnordberg.lox.Expr.Variable;
@@ -61,7 +63,8 @@ import java.util.List;
  *                | funDecl
  *                | varDecl
  *                | statement ;
- * classDecl      → "class" IDENTIFIER "{" function* "}" ;
+ * classDecl      → "class" IDENTIFIER ( "<" IDENTIFIER )?
+ *                  "{" function* "}" ;
  * funDecl        → "fun" function ;
  * function       → IDENTIFIER "(" parameters? ")" block ;
  * parameters     → IDENTIFIER ( "," IDENTIFIER )* ;
@@ -96,10 +99,9 @@ import java.util.List;
  * unary          → ( "!" | "-" ) unary
  * call           → primary ( "(" arguments? ")" | "." IDENTIFIER )* ;
  * arguments      → expression ( "," expression )* ;
- * primary        → "true" | "false" | "nil"
- *                | NUMBER | STRING
- *                | "(" expression ")"
- *                | IDENTIFIER ;
+ * primary        → "true" | "false" | "nil" | "this"
+ *                | NUMBER | STRING | IDENTIFIER | "(" expression ")"
+ *                | "super" "." IDENTIFIER ;
  */
 
 public class Parser {
@@ -135,7 +137,7 @@ public class Parser {
       if (expr instanceof Expr.Variable) {
         Token name = ((Variable) expr).name;
         return new Expr.Assign(name, value);
-      } else if(expr instanceof Get) {
+      } else if (expr instanceof Get) {
         Expr.Get get = (Get) expr;
         return new Expr.Set(get.object, get.name, value);
       }
@@ -186,6 +188,13 @@ public class Parser {
 
   private Stmt classDeclaration() {
     Token name = consume(IDENTIFIER, "Expect class name");
+
+    Expr.Variable superclass = null;
+    if (match(LESS)) {
+      consume(IDENTIFIER, "Expect superclass name");
+      superclass = new Expr.Variable(previous());
+    }
+
     consume(LEFT_BRACE, "Expect '{' before class body");
 
     List<Stmt.Function> methods = new ArrayList<>();
@@ -194,7 +203,7 @@ public class Parser {
     }
 
     consume(RIGHT_BRACE, "Expect '}' after class body");
-    return new Class(name, methods);
+    return new Class(name, superclass, methods);
   }
 
   private Stmt.Function function(String kind) {
@@ -421,6 +430,12 @@ public class Parser {
     }
     if (match(NUMBER, STRING)) {
       return new Literal(previous().literal);
+    }
+    if (match(SUPER)) {
+      Token keyword = previous();
+      consume(DOT, "Expect '.' after 'super'");
+      Token method = consume(IDENTIFIER, "Expect superclass method name");
+      return new Super(keyword, method);
     }
     if (match(THIS)) {
       return new This(previous());
